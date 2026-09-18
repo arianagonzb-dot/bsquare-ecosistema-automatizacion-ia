@@ -1,0 +1,33 @@
+{
+  "name": "Bsquare - Aprobacion en Tiempo Real (HITL Webhook)",
+  "flow": [
+    {"id": 1, "module": "gateway:CustomWebHook", "parameters": {"hook": 2829965}, "mapper": {}},
+    {"id": 2, "module": "airtable:ActionGetRecord", "mapper": {"base": "appsShfzxZcxBKOaC", "table": "tbl6PjkkGAQaFNzeB", "id": "{{1.id}}"}},
+    {"id": 3, "module": "airtable:ActionGetRecord", "mapper": {"base": "appsShfzxZcxBKOaC", "table": "tbluyG0M33rE7GcNv", "id": "{{first(2.Cliente)}}"}},
+    {"id": 4, "module": "builtin:BasicRouter", "routes": [
+      {"flow": [
+        {"id": 5, "module": "airtable:ActionUpdateRecords",
+         "filter": {"name": "Aprobado", "conditions": [[{"a": "{{1.action}}", "o": "text:equal", "b": "approve"}]]},
+         "mapper": {"base": "appsShfzxZcxBKOaC", "table": "tbl6PjkkGAQaFNzeB", "id": "{{2.id}}", "record": {"Estado": "Confirmado"}}},
+        {"id": 6, "module": "builtin:BasicRouter", "routes": [
+          {"flow": [
+            {"id": 7, "module": "twilio:SendSMS",
+             "filter": {"name": "Canal WhatsApp", "conditions": [[{"a": "{{2.Canal de Salida}}", "o": "text:equal", "b": "WhatsApp"}]]},
+             "mapper": {"from": "whatsapp:+14155238886", "to": "whatsapp:+{{3.Telefono}}", "body": "Hola {{3.Nombre}}, tu cotizacion de Bsquare fue aprobada:\n\n{{2.Borrador Cotizacion}}"}}
+          ]},
+          {"flow": [
+            {"id": 8, "module": "google-email:sendAnEmail",
+             "filter": {"name": "Canal Gmail", "conditions": [[{"a": "{{2.Canal de Salida}}", "o": "text:equal", "b": "Gmail"}]]},
+             "mapper": {"to": ["{{3.Email}}"], "subject": "Tu cotizacion de Bsquare", "bodyType": "rawHtml", "content": "<p>Hola {{3.Nombre}},</p><p>{{2.Borrador Cotizacion}}</p><p>Saludos,<br>Equipo Bsquare</p>"}}
+          ]}
+        ]}
+      ]},
+      {"flow": [
+        {"id": 9, "module": "airtable:ActionUpdateRecords",
+         "filter": {"name": "Rechazado", "conditions": [[{"a": "{{1.action}}", "o": "text:equal", "b": "reject"}]]},
+         "mapper": {"base": "appsShfzxZcxBKOaC", "table": "tbl6PjkkGAQaFNzeB", "id": "{{2.id}}", "record": {"Estado": "Cancelado"}}},
+        {"id": 10, "module": "slack:CreateMessage", "mapper": {"channel": "#todo-bsquare", "text": "Cotizacion rechazada para {{3.Nombre}} ({{2.Tipo de Evento}}). No se envio nada al cliente."}}
+      ]}
+    ]}
+  ]
+}

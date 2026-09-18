@@ -1,0 +1,38 @@
+{
+  "name": "Bsquare - Recepcion y Cotizacion (Webhook + RAG + IA)",
+  "flow": [
+    {"id": 1, "module": "gateway:CustomWebHook", "parameters": {"hook": 2829964}, "mapper": {}},
+    {"id": 2, "module": "airtable:ActionCreateRecord", "mapper": {"base": "appsShfzxZcxBKOaC", "table": "tbluyG0M33rE7GcNv", "record": {"Nombre": "{{1.nombre}}", "Email": "{{1.email}}", "Telefono": "{{1.telefono}}"}, "typecast": true}},
+    {"id": 3, "module": "airtable:ActionSearchRecords", "mapper": {"base": "app8TWDClY8qqessW", "table": "tbli30yBj6WQhzplJ", "maxRecords": 10}},
+    {"id": 4, "module": "util:TextAggregator", "mapper": {"value": "Tema: {{3.Tema}}\nContenido: {{3.Contenido}}"}, "parameters": {"feeder": 3}},
+    {"id": 5, "module": "gemini-ai:createACompletionGeminiPro", "mapper": {
+        "model": "gemini-3.1-flash-lite",
+        "contents": [{"role": "user", "parts": [{"type": "text", "text": "Cliente: {{2.Nombre}}\nTipo de evento: {{1.tipo_evento}}\nFecha: {{1.fecha_evento}}\nInvitados: {{1.invitados}}\nLugar: {{1.lugar_evento}}\nTransporte: {{1.transporte}}\nCatalogo solicitado: {{1.catalogo}}\n\nContexto privado (RAG):\n{{4.text}}"}]}],
+        "generationConfig": {"maxOutputTokens": 1024, "thinkingConfig": {"thinkingBudget": 0}},
+        "system_instruction": {"parts": [{"text": "Eres el asistente de cotizaciones de Bsquare, empresa de alquiler de mobiliario y carpas para eventos y bodas en El Salvador. Con el contexto RAG y los datos del formulario, redacta una cotizacion profesional y personalizada. Devuelve SOLO un JSON con: resumen_cotizacion (texto de 100 a 180 palabras) y prioridad (numero del 1 al 5). Sin markdown. Empieza con { y termina con }."}]}
+      },
+      "onerror": [
+        {"id": 12, "module": "builtin:Break", "mapper": {"retry": true, "count": 3, "interval": 1}},
+        {"id": 10, "module": "airtable:ActionCreateRecord", "mapper": {"base": "appsShfzxZcxBKOaC", "table": "tbl9aStIRADxNFd5V", "record": {"Nodo": "Google Gemini AI - Generate a response", "Mensaje de Error": "Fallo tras 3 reintentos al generar la cotizacion con IA.", "Referencia de Lead": "{{2.Nombre}} - {{1.tipo_evento}}"}, "typecast": true}},
+        {"id": 11, "module": "slack:CreateMessage", "mapper": {"channel": "#todo-bsquare", "text": "Error en el pipeline de Bsquare: no se pudo generar la cotizacion para {{2.Nombre}} tras 3 intentos."}}
+      ]
+    },
+    {"id": 6, "module": "json:ParseJSON", "mapper": {"json": "{{substring(5.candidates.1.content.parts.1.text; indexOf(5.candidates.1.content.parts.1.text; \"{\"); indexOf(5.candidates.1.content.parts.1.text; \"}\") + 1)}}"}, "parameters": {"type": "Cotizacion IA Bsquare (resumen_cotizacion:text, prioridad:text)"}},
+    {"id": 7, "module": "airtable:ActionCreateRecord", "mapper": {"base": "appsShfzxZcxBKOaC", "table": "tbl6PjkkGAQaFNzeB", "record": {
+        "Nombre del Evento": "{{1.tipo_evento}} - {{2.Nombre}}",
+        "Tipo de Evento": "{{1.tipo_evento}}",
+        "Fecha del Evento": "{{1.fecha_evento}}",
+        "Lugar del Evento": "{{1.lugar_evento}}",
+        "Cantidad de Invitados": "{{1.invitados}}",
+        "Necesita Transporte": "{{switch(1.transporte; \"Si\"; \"Si con tilde\"; \"Si con tilde\")}}",
+        "Catalogo Solicitado": "{{1.catalogo}}",
+        "Estado": "En Proceso",
+        "Prioridad": "{{substring(6.prioridad;0;1)}}",
+        "Borrador Cotizacion": "{{6.resumen_cotizacion}}",
+        "Canal de Salida": "{{switch(substring(6.prioridad;0;1); \"5\"; \"WhatsApp\"; \"4\"; \"WhatsApp\"; \"Gmail\")}}"
+      }, "typecast": true}},
+    {"id": 13, "module": "airtable:ActionUpdateRecords", "mapper": {"base": "appsShfzxZcxBKOaC", "table": "tbl6PjkkGAQaFNzeB", "id": "{{7.id}}", "record": {"Cliente": ["{{2.id}}"]}, "typecast": true}},
+    {"id": 8, "module": "slack:CreateMessage", "mapper": {"channel": "#todo-bsquare", "text": "Nueva cotizacion lista para revisar. Cliente: {{2.Nombre}}. Prioridad: {{6.prioridad}}/5. Cotizacion: {{6.resumen_cotizacion}}. Aprobar: https://hook.us2.make.com/[HITL_WEBHOOK]?id={{7.id}}&action=approve . Rechazar: https://hook.us2.make.com/[HITL_WEBHOOK]?id={{7.id}}&action=reject"}},
+    {"id": 9, "module": "gateway:WebhookRespond", "mapper": {"status": 200, "body": "Recibido, procesando tu cotizacion."}}
+  ]
+}
